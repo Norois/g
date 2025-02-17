@@ -14,11 +14,10 @@ fn main() -> Result<(), Box<dyn Error>>{
         can_walk_on: false
     };
     let mut map = Map::new(50, 20, Material::new('█', Rgb(0, 255, 0)),
-    error_tile, (1, 1));
+    error_tile, Position::new(1, 1));
     let mut player = Player{
         material: Material::new('ඞ', Rgb(255, 0, 0,)),
-        position_x: 5,
-        position_y: 5
+        position: Position::new(5, 5)
     };
     
     let stdin: std::io::Stdin = stdin();
@@ -27,13 +26,15 @@ fn main() -> Result<(), Box<dyn Error>>{
         material: Material::new('?', Rgb(0, 255, 255)),
         can_walk_on: false
     }).unwrap();
+    map.add_object(g::objects::Switch::new(Material::new('I', Rgb(0, 255, 0)),
+        Material::new('O', Rgb(255, 0, 0))), Position::new(10, 15));
     map.display_map(&player);
     
     for k in stdin.keys() {
         match k.as_ref().unwrap() {
             event::Key::Char('q') => break,
             event::Key::Char('r') => map.display_map(&player),
-            event::Key::Char('p') => print!("{:?}", (&player.position_x, &player.position_y)),
+            event::Key::Char('p') => print!("{:?}", (&player.position.get_x(), &player.position.get_y())),
             event::Key::Left => {
                 map.move_player(&mut player, -1, 0);
             },
