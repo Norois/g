@@ -1,6 +1,6 @@
 use g::*;
-use termion::{clear, color::Rgb, cursor, event, input::TermRead, raw::IntoRawMode, style};
-use std::{error::Error, io::{stdin, stdout, Write}};
+use termion::{clear, color::Rgb, cursor, event, input::TermRead, style};
+use std::{error::Error, io::stdin};
 
 
 fn main() -> Result<(), Box<dyn Error>>{
@@ -9,49 +9,45 @@ fn main() -> Result<(), Box<dyn Error>>{
         print!("{}{}{}", clear::All, style::Reset, cursor::Goto(1, 1));
         println!("The program has panicked!\r");
     }));
-    let error_tile = Tile{
-        material: Material::new('$', Rgb(255, 0, 255)),
-        can_walk_on: false
-    };
-    let mut map = Map::new(50, 20, Material::new('█', Rgb(0, 255, 0)),
-    error_tile, Position::new(1, 1));
-    let mut player = Player{
+    let map = Map::new(75, 30, Material::new('█', Rgb(0, 255, 0)));
+    let player = Player{
         material: Material::new('ඞ', Rgb(255, 0, 0,)),
-        position: Position::new(5, 5)
+        position: Position::new(0, 0)
     };
+    let mut state = State::new(map, player, Position::new(1, 1), "idk".to_string());
+    
+    // state.map.replace_tile_at(10, 10, Tile{
+    //     material: Material::new('?', Rgb(0, 255, 255)),
+    //     can_walk_on: false
+    // }).unwrap();
+    state.map.add_object(g::objects::Switch::new(Material::new('I', Rgb(0, 255, 0)),
+        Material::new('O', Rgb(255, 0, 0))), Position::new(10, 15));
+    state.map.add_object(g::objects::Switch::new(Material::new('I', Rgb(0, 255, 0)),
+    Material::new('O', Rgb(255, 0, 0))), Position::new(10, 15));
+    state.display_map();
     
     let stdin: std::io::Stdin = stdin();
-    let mut stdout: termion::raw::RawTerminal<std::io::Stdout> = stdout().into_raw_mode()?;
-    map.replace_tile_at(10, 10, Tile{
-        material: Material::new('?', Rgb(0, 255, 255)),
-        can_walk_on: false
-    }).unwrap();
-    map.add_object(g::objects::Switch::new(Material::new('I', Rgb(0, 255, 0)),
-        Material::new('O', Rgb(255, 0, 0))), Position::new(10, 15));
-    map.display_map(&player);
-    
     for k in stdin.keys() {
         match k.as_ref().unwrap() {
             event::Key::Char('q') => break,
-            event::Key::Char('r') => map.display_map(&player),
-            event::Key::Char('p') => print!("{:?}", (&player.position.get_x(), &player.position.get_y())),
+            event::Key::Char('r') => state.display_map(),
+            event::Key::Char('p') => print!("{:?}", state.get_player_pos()),
             event::Key::Left => {
-                map.move_player(&mut player, -1, 0);
+                state.move_player(Movement::new(-1, 0));
             },
             event::Key::Right => {
-                map.move_player(&mut player, 1, 0);
+                state.move_player(Movement::new(1, 0));
             },
             event::Key::Up => {
-                map.move_player(&mut player, 0, -1);
+                state.move_player(Movement::new(0, -1));
             },
             event::Key::Down => {
-                map.move_player(&mut player, 0, 1);
+                state.move_player(Movement::new(0, 1));
             },
             _ => ()
         }
-        stdout.flush().unwrap();
+        state.flush_stdout();
     }
-    stdout.flush().unwrap();
 
     print!("{}{}{}", clear::All, style::Reset, cursor::Goto(1, 1));
     Ok(())

@@ -1,6 +1,79 @@
-use std::future::poll_fn;
-
 // https://en.wikipedia.org/wiki/List_of_Unicode_characters#Box_Drawing
+
+pub struct State{
+    pub map: Map,
+    player: Player,
+    draw_at: Position,
+    raw_mode: termion::raw::RawTerminal<std::io::Stdout>,
+    error_tile: Tile,
+    database: data::DataBase
+}
+impl State{
+    pub fn new(map: Map, player: Player, draw_at: Position, path: String) -> State{
+        let raw_mode = std::io::stdout().into_raw_mode().unwrap();
+        let database = DataBase::new(path);
+        let error_tile = Tile::new(Material::new('$', termion::color::Rgb(255, 0, 255)), true);
+        State{
+            map, 
+            player,
+            draw_at,
+            raw_mode,
+            error_tile,
+            database
+        }
+    }
+    pub fn display_map(&self){
+        print!("{}{}{}\r", termion::clear::All, termion::cursor::Restore, termion::cursor::Hide);
+        print!("{}", termion::cursor::Goto(self.draw_at.x, self.draw_at.y));
+        for slice in &self.map.map{
+            for tile in slice{
+                print!("{}", tile.material);
+            }
+            println!("{}", termion::cursor::Left(slice.len() as u16));
+        }
+        for object in self.map.get_objects_iter(){
+            print!("{}{}", termion::cursor::Goto(object.0.x + self.draw_at.x, object.0.y + self.draw_at.y), object.1.display())
+        }
+        println!("{}{}", termion::cursor::Goto(
+            self.player.position.x + self.draw_at.x, 
+            self.player.position.y + self.draw_at.y), self.player);
+    }
+    pub fn print_player(&self){
+        println!("{}{}",termion::cursor::Goto(self.player.position.x + self.draw_at.x, self.player.position.y + self.draw_at.y) , self.player);
+    }
+    pub fn flush_stdout(&mut self){
+        self.raw_mode.flush().unwrap();
+    }
+    pub fn get_player_pos(&self) -> (u16, u16){
+        (self.player.position.x, self.player.position.y)
+    }
+    pub fn move_player(&mut self, movement: Movement) {
+        let new_position = Position::new(
+            self.player.position.x.checked_add_signed(movement.width).unwrap_or(self.player.position.x),
+            self.player.position.y.checked_add_signed(movement.height).unwrap_or(self.player.position.y));
+
+        if let Some(v) = &self.map.get_tile_at(new_position){   
+            if let Some(t) = self.map.get_obj_mut(new_position) {
+                t.on_player_contact(&mut self.player);
+                if !t.walkable() {
+                    print!("{}{}", termion::cursor::Goto(new_position.x + self.draw_at.x, new_position.y + self.draw_at.y), t.display());
+                    return;
+                }
+            }
+            if !v.can_walk_on {
+                return;
+            }
+
+        } else{
+            return;
+        }
+        print!("{}{}", termion::cursor::Goto(self.player.position.x + self.draw_at.x, self.player.position.y + self.draw_at.y), self.map.get_tile_at(Position::new(self.player.position.x, self.player.position.y)).unwrap_or(self.error_tile).material);
+        self.player.position.x = new_position.x;
+        self.player.position.y = new_position.y;
+        self.print_player();
+    }
+}
+
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Position{
     x: u16,
@@ -9,12 +82,6 @@ pub struct Position{
 impl Position {
     pub fn new(x: u16, y: u16) -> Position{
         Position{x, y}
-    }
-    pub fn get_x(&self) -> u16{
-        self.x
-    }
-    pub fn get_y(&self) -> u16{
-        self.y
     }
 }
 
@@ -37,12 +104,6 @@ impl Material{
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
-pub struct Tile{
-    pub material: Material,
-    pub can_walk_on: bool
-}
-
 pub struct Player{
     pub material: Material,
     pub position: Position
@@ -53,96 +114,38 @@ impl core::fmt::Display for Player {
     }
 }
 
-pub struct Map{
-   map: Vec<Vec<Tile>>,
-   error_tile: Tile,
-   draw_at: Position,
-   objects: objects::Objects
+pub struct Movement{
+    width: i16,
+    height: i16
 }
-impl Map{
-    pub fn new(width: u8, height: u8, material: Material, error_tile: Tile, draw_at: Position) -> Map{
-        let mut map_slice = Vec::new();
-        for _ in 0..width{
-            map_slice.push(Tile{
-                material,
-                can_walk_on: true
-            });
-        }
-        let mut map = Vec::new();
-        for _ in 0..height{
-            map.push(map_slice.clone());
-        }
-        let objects = objects::Objects::new();
-        Map{map, error_tile, draw_at, objects}
-    }
-    pub fn get_tile_at(&self, position: Position) -> Option<Tile>{
-        self.map.get(position.y as usize)?.get(position.get_x() as usize).copied()
-    }
-    pub fn replace_tile_at(&mut self, x: u16, y: u16, tile: Tile) -> Result<(), &str>{
-        if let Some(elem) = self
-            .map
-            .get_mut(y as usize)
-            .and_then(|elem| elem.get_mut(x as usize))
-        {
-            *elem = tile;
-        } else 
-        {
-            return Err("No such tile");
-        }
-        Ok(())
-    }
-    pub fn display_map(&self, player: &Player){
-        print!("{}{}{}\r", termion::clear::All, termion::cursor::Restore, termion::cursor::Hide);
-        print!("{}", termion::cursor::Goto(self.draw_at.x, self.draw_at.y));
-        for slice in &self.map{
-            for tile in slice{
-                print!("{}", tile.material);
-            }
-            print!("{}\n", termion::cursor::Left(slice.len() as u16));
-        }
-        for object in self.objects.0.iter(){
-            print!("{}{}", termion::cursor::Goto(object.0.get_x() + self.draw_at.get_x(), object.0.get_y() + self.draw_at.get_y()), object.1.display())
-        }
-        print!("{}{}\n", termion::cursor::Goto(
-            player.position.x + self.draw_at.x, 
-            player.position.y + self.draw_at.y), player);
-    }
-    pub fn move_player(&mut self, player: &mut Player, width: i16, height: i16){
-        let new_position = Position::new(
-            player.position.x.checked_add_signed(width).unwrap_or(player.position.x),
-            player.position.y.checked_add_signed(height).unwrap_or(player.position.y));
-
-        if let Some(v) = &self.get_tile_at(
-            new_position)
-        {   
-            if self.has_object(new_position){
-                if let Some(t) = self.objects.get_obj_mut(new_position){
-                    t.on_player_contact();
-                    if !t.walkable() {
-                        print!("{}{}", termion::cursor::Goto(new_position.get_x() + self.draw_at.get_x(), new_position.get_y() + self.draw_at.get_y()), t.display());
-                        return;
-                    }
-                }
-            }
-            if !v.can_walk_on
-            {
-                return;
-            }
-
-        } else{
-            return;
-        }
-        print!("{}{}", termion::cursor::Goto(player.position.x + self.draw_at.x, player.position.y + self.draw_at.y), self.get_tile_at(Position::new(player.position.x, player.position.y)).unwrap_or(*&self.error_tile).material);
-        player.position.x = new_position.x;
-        player.position.y = new_position.y;
-        print!("{}{}\n",termion::cursor::Goto(player.position.x + self.draw_at.x, player.position.y + self.draw_at.y) , player);
-    }
-    pub fn add_object<T: objects::Object + 'static>(&mut self, object: T, position: Position){
-        self.objects.0.insert(position, Box::from(object));
-    }
-    fn has_object(&self, position: Position) -> bool{
-        self.objects.0.contains_key(&position)
+impl Movement{
+    pub fn new(width: i16, height: i16) -> Movement{
+        Movement{width, height}
     }
 }
+
+use std::io::Write;
+
+use data::DataBase;
+pub use map::Map;
+use map::Tile;
+use termion::raw::IntoRawMode;
 
 pub mod objects;
+pub mod map;
+
+pub mod data;
+
+
+#[cfg(test)]
+mod tests{
+    use std::{fs::File, io::Write};
+
+    use crate::{data::serde::ToJsonString, Map, Material};
+
+    #[test]
+    fn show_me_json(){
+        File::create("i").unwrap().write(Map::new(50, 50, Material::new('c', termion::color::Rgb(12, 210, 184))).to_json_string().as_bytes()).unwrap();
+    
+    }
+}

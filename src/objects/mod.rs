@@ -1,7 +1,7 @@
 use super::*;
 
 pub trait Object{
-    fn on_player_contact(&mut self);
+    fn on_player_contact(&mut self, player: &mut Player);
     fn display(&self) -> Material;
     fn walkable(&self) -> bool;
 }
@@ -18,6 +18,9 @@ impl Objects{
     }
     pub fn get_obj_mut(&mut self, position: Position) -> Option<&mut Box<dyn Object>>{
         self.0.get_mut(&position)
+    }
+    pub fn add_object<T: Object + 'static>(&mut self, object: T, position: Position){
+        self.0.insert(position, Box::from(object));
     }
 }
 pub struct Switch{
@@ -44,7 +47,7 @@ impl Switch{
     }
 }
 impl Object for Switch{
-    fn on_player_contact(&mut self){
+    fn on_player_contact(&mut self, _player: &mut Player){
         self.change();
     }
     fn display(&self) -> Material {
