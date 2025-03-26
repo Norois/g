@@ -4,33 +4,31 @@ pub struct State{
     pub map: Map,
     player: Player,
     draw_at: Position,
-    raw_mode: termion::raw::RawTerminal<std::io::Stdout>,
     error_tile: Tile,
     database: data::DataBase
 }
 impl State{
     pub fn new(player: Player, draw_at: Position, path: String) -> State{
-        let raw_mode = std::io::stdout().into_raw_mode().unwrap(
-            /* This unwrap stays, if it fails then I have no idea what happened to your system vro */
-        );
         let database = DataBase::new(path);
         let error_tile = Tile::new(Material::new('$', (255, 0, 255)), true);
         /* Error tile appears only when I break something really bad lol */
         let map = database.request_map(&player.chunk_pos, 50, 25);
+        crossterm::terminal::enable_raw_mode().unwrap();
         State{
             map, 
             player,
             draw_at,
-            raw_mode,
             error_tile,
             database
         }
     }
     pub fn display_map(&self){
-        print!("{}{}{}\r", termion::clear::All, termion::cursor::Restore, termion::cursor::Hide);
-        print!("{}", termion::cursor::Goto(self.draw_at.x, self.draw_at.y));
+        let mut stdout = stdout();
+        stdout.execute(crossterm::terminal::Clear(crossterm::terminal::ClearType::All)).unwrap();
+        stdout.execute(crossterm::cursor::Hide).unwrap();
+        stdout.execute(crossterm::cursor::MoveTo(self.draw_at.x, self.draw_at.y)).unwrap();
 
-        let terminal_size = termion::terminal_size().unwrap();
+        let terminal_size = crossterm::terminal::size().unwrap();
         if terminal_size.0 < self.map.size.0 as u16 || terminal_size.1 < self.map.size.1 as u16 {
             println!("The size of your map is: {:?}.\n\rThe size of your terminal is: {:?}.\n\rPlease Decrease the font size or increase the terminal window to properly display the map and click the R key to reload the map.", self.map.size, terminal_size);
             return;
@@ -41,17 +39,21 @@ impl State{
             for tile in slice{
                 if let Some(v) = tile.object{print!("{}", v.get_material())}else{print!("{}", tile.material);}
             }
-            println!("{}", termion::cursor::Left(slice.len() as u16));
+            print!("\n");
+            stdout.execute(crossterm::cursor::MoveLeft(slice.len() as u16)).unwrap();
         }
-        println!("{}{}", termion::cursor::Goto(
-            self.player.position.x + self.draw_at.x, 
-            self.player.position.y + self.draw_at.y), self.player);
+        stdout.execute(crossterm::cursor::MoveTo(
+            self.player.position.x + self.draw_at.x,
+            self.player.position.y + self.draw_at.y)
+        ).unwrap();
+        print!("{}\n", self.player);
     }
     pub fn print_player(&self){
-        println!("{}{}",termion::cursor::Goto(self.player.position.x + self.draw_at.x, self.player.position.y + self.draw_at.y) , self.player);
+        stdout().execute(crossterm::cursor::MoveTo(self.player.position.x + self.draw_at.x, self.player.position.y + self.draw_at.y)).unwrap();
+        println!("{}", self.player);
     }
     pub fn flush_stdout(&mut self){
-        self.raw_mode.flush().unwrap();
+        stdout().flush().unwrap();
     }
     pub fn get_player_pos(&self) -> (u16, u16){
         (self.player.position.x, self.player.position.y)
@@ -93,15 +95,16 @@ impl State{
         if let Some(o) = &mut tile.object{
             o.on_player_walk();
             if !o.can_walk_on(){
-                print!("{}{}", termion::cursor::Goto(new_position.x + self.draw_at.x, new_position.y + self.draw_at.y), o.get_material());
+                stdout().execute(crossterm::cursor::MoveTo(new_position.x + self.draw_at.x, new_position.y + self.draw_at.y)).unwrap();
+                print!("{}", o.get_material());
                 return;
             }
         }
         if !tile.can_walk_on{
             return;
         }
-        
-        print!("{}{}", termion::cursor::Goto(self.player.position.x + self.draw_at.x, self.player.position.y + self.draw_at.y), self.map.get_tile_at(Position::new(self.player.position.x, self.player.position.y)).unwrap_or(&self.error_tile).get_material());
+        stdout().execute(crossterm::cursor::MoveTo(self.player.position.x + self.draw_at.x, self.player.position.y + self.draw_at.y)).unwrap();
+        print!("{}", self.map.get_tile_at(Position::new(self.player.position.x, self.player.position.y)).unwrap_or(&self.error_tile).get_material());
         self.player.position = new_position;
         self.print_player();
     }
@@ -143,7 +146,8 @@ pub struct Material{
 }
 impl core::fmt::Display for Material {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", termion::color::Fg(termion::color::Rgb(self.color.0, self.color.1, self.color.2)), self.character)
+        stdout().execute(crossterm::style::SetForegroundColor(crossterm::style::Color::Rgb { r: self.color.0, g: self.color.1, b: self.color.2 })).unwrap();
+        write!(f, "{}", self.character)
     }
 }
 impl Material{
@@ -185,12 +189,22 @@ impl Movement{
     }
 }
 
-use std::io::Write;
+pub fn restore_terminal(){
+    let mut stdout = stdout();
+    stdout.queue(crossterm::terminal::Clear(crossterm::terminal::ClearType::All)).unwrap();
+    stdout.queue(crossterm::style::ResetColor).unwrap();
+    stdout.queue(crossterm::cursor::Show).unwrap();
+    stdout.queue(crossterm::cursor::MoveTo(0, 0)).unwrap();
+    stdout.flush().unwrap();
+    crossterm::terminal::disable_raw_mode().unwrap();
+}
 
+use std::io::{stdout, Write};
+
+use crossterm::{ExecutableCommand, QueueableCommand};
 use data::DataBase;
 pub use map::Map;
 use map::{ChunkPosition, Tile};
-use termion::raw::IntoRawMode;
 
 pub mod objects;
 pub mod map;
