@@ -1,3 +1,7 @@
+use std::io::{stdin, stdout, Write};
+
+use crossterm::{ExecutableCommand, QueueableCommand};
+
 use crossterm::event::KeyCode;
 use g::*;
 
@@ -12,12 +16,18 @@ fn main(){
     
     let player = Player::new();
     let mut state = State::new(player, Position::new(0, 0), "tests".to_string());
+        
+    let mut stdout = stdout();
+    stdout.queue(crossterm::terminal::Clear(crossterm::terminal::ClearType::All)).unwrap();
+    stdout.queue(crossterm::style::ResetColor).unwrap();
+    stdout.queue(crossterm::cursor::MoveTo(0, 0)).unwrap();
+    stdout.queue(crossterm::cursor::Hide).unwrap();
+    stdout.flush().unwrap();
+
     
-    // state.map.replace_tile_at(10, 10, map::Tile{
-    //     material: Material::new('?', (0, 255, 255)),
-    //     can_walk_on: false,
-    //     object: None
-    // }).unwrap();
+    let menu = g::menu::MainMenu;
+    menu.process_menu();
+
     
     state.display_map();
     
