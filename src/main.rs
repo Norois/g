@@ -1,6 +1,6 @@
-use std::io::{stdin, stdout, Write};
+use std::io::{stdout, Write};
 
-use crossterm::{ExecutableCommand, QueueableCommand};
+use crossterm::QueueableCommand;
 
 use crossterm::event::KeyCode;
 use g::*;
@@ -13,9 +13,8 @@ fn main(){
         g::restore_terminal();
         println!("\r\n{err}");
         }));
-    
-    let player = Player::new();
-    let mut state = State::new(player, Position::new(0, 0), "tests".to_string());
+
+    let mut state = State::new(Position::new(0, 0), "new".to_string());
         
     let mut stdout = stdout();
     stdout.queue(crossterm::terminal::Clear(crossterm::terminal::ClearType::All)).unwrap();
@@ -25,7 +24,7 @@ fn main(){
     stdout.flush().unwrap();
 
     
-    let menu = g::menu::MainMenu;
+    let mut menu = g::menu::MainMenu::new();
     menu.process_menu();
 
     
@@ -36,7 +35,7 @@ fn main(){
             crossterm::event::Event::Key(event) => match event.code{
                 KeyCode::Char('q') => break,
                 KeyCode::Char('p') => print!("{:?}", state.get_player_pos()),
-                KeyCode::Char('s') => state.save_map(),
+                KeyCode::Char('s') => state.save(),
                 KeyCode::Up => state.move_player(Movement::new(0, -1)),
                 KeyCode::Down => state.move_player(Movement::new(0, 1)),
                 KeyCode::Left => state.move_player(Movement::new(-1, 0)),

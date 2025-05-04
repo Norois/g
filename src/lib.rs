@@ -8,11 +8,13 @@ pub struct State{
     database: data::DataBase
 }
 impl State{
-    pub fn new(player: Player, draw_at: Position, path: String) -> State{
+    pub fn new(draw_at: Position, path: String) -> State{
         let database = DataBase::new(path);
         let error_tile = Tile::new(Material::new('$', (255, 0, 255)), true);
         /* Error tile appears only when I break something really bad lol */
+        let player = database.request_player();
         let map = database.request_map(&player.chunk_pos, 50, 25);
+        
         crossterm::terminal::enable_raw_mode().unwrap();
         State{
             map, 
@@ -69,7 +71,7 @@ impl State{
         );
         if let None = self.map.get_tile_at(true_new_position.to_pos()){
             
-            self.save_map();
+            self.save();
             if true_new_position.x >= self.map.size.0 as i16{
                 self.player.chunk_pos.x += 1;
                 self.player.position.x = 0;
@@ -108,8 +110,9 @@ impl State{
         self.player.position = new_position;
         self.print_player();
     }
-    pub fn save_map(&self){
+    pub fn save(&self){
         self.database.save_map(&self.map, &self.player.chunk_pos);
+        self.database.save_player(&self.player);
     }
 }
 
@@ -159,6 +162,7 @@ impl Material{
     }
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct Player{
     pub material: Material,
     pub position: Position,

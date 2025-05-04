@@ -61,6 +61,7 @@ impl Tile{
     }
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
 pub(crate) struct ChunkPosition{
     pub(crate) x: i64,
     pub(crate) y: i64
